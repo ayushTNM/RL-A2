@@ -96,12 +96,13 @@ for episode in progress_bar:
         state = next_state
         total_reward += reward.item()
 
-    losses.append(total_loss/iteration)
-    progress_bar.desc =  f"Ep. {episode + 1}, Avg. Loss {losses[-1]:3f}, Tot. R.: {total_reward}"
-    if not best_net or losses[-1] < list(best_net.keys())[0]:
-        print("best reward:",total_reward)
-        best_net = {losses[-1]:copy.deepcopy(agent.Qnet)}
+    avg_loss = total_loss/iteration
+    progress_bar.desc =  f"Ep. {episode + 1}, Avg. Loss {avg_loss:3f}, Tot. R.: {total_reward}"
+    if not best_net or avg_loss < min(losses) or total_reward > list(best_net.keys())[0]:
+        if total_reward >= list(best_net.keys())[0]: # In case avg_loss < min(lossses)
+            best_net = {total_reward:copy.deepcopy(agent.Qnet)}
 
+    losses.append(avg_loss)
 # plt.plot(losses)
 # plt.xlabel('Episode')
 # plt.ylabel('Loss')
@@ -113,9 +114,13 @@ env = gym.make("CartPole-v1", render_mode="human")
 agent.Qnet = list(best_net.values())[0]
 state = torch.tensor(env.reset()[0], dtype=torch.float32, device=dev)
 term, trunc = False, False
+total_reward = 0
+
 while not term and not trunc:
     action = agent.select_action(state.unsqueeze(0), 'greedy')
     next_state, reward, term, trunc, _ = env.step(action)
     next_state = torch.tensor(next_state, dtype=torch.float32, device=dev)
+    total_reward += reward.item()
     state = next_state
+print("Total reward:",total_reward)
 env.close()
