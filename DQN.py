@@ -64,7 +64,7 @@ epsilon_start = 0.1
 epsilon_decay = 0.995
 epsilon_min = 0.01
 temp = 0.1
-num_episodes = 500
+num_train_steps = 25000
 
 losses = []
 best_net = {}
@@ -72,37 +72,48 @@ best_net = {}
 # Initialize environment and agent
 env = gym.make("CartPole-v1")
 agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, lr, gamma)
-progress_bar = tqdm(range(num_episodes))
+progress_bar = tqdm(range(num_train_steps))
 
-# training loop
-for episode in progress_bar:
+def next_episode():
+    # change 'global' to 'nonlocal' if function is nested
+    global state, term, trunc, total_episode_loss, total_episode_reward, episode_start_step, episode_iteration
     state = torch.tensor(env.reset()[0], dtype=torch.float32, device=dev)
     term, trunc = False, False
-    total_loss = 0
-    total_reward = 0
-    iteration = 0
-    while not term and not trunc:
-        iteration += 1
-        epsilon = max(epsilon_start * epsilon_decay ** episode, epsilon_min)
-        action = agent.select_action(state.unsqueeze(0), policy=policy, epsilon=epsilon, temp=temp)
-        next_state, reward, term, trunc, _ = env.step(action)
+    total_episode_loss = 0
+    total_episode_reward = 0
+    episode_start_step = _train_step
+    episode_iteration += 1
 
-        next_state = torch.tensor(next_state, dtype=torch.float32, device=dev)
-        reward = torch.tensor(reward, dtype=torch.float32, device=dev)
-        done_flag = torch.tensor(term or trunc, dtype=torch.float32, device=dev)
+# training loop
+episode_iteration = -1
+_train_step = 0
+next_episode()
+for train_step in progress_bar:
+    _train_step = train_step
 
-        loss = agent.update(state.unsqueeze(0), action, next_state.unsqueeze(0), reward, done_flag)
-        total_loss += loss
-        state = next_state
-        total_reward += reward.item()
+    epsilon = max(epsilon_start * epsilon_decay ** episode_iteration, epsilon_min)
+    action = agent.select_action(state.unsqueeze(0), policy=policy, epsilon=epsilon, temp=temp)
+    next_state, reward, term, trunc, _ = env.step(action)
 
-    avg_loss = total_loss/iteration
-    progress_bar.desc =  f"Ep. {episode + 1}, Avg. Loss {avg_loss:3f}, Tot. R.: {total_reward}"
-    if not best_net or avg_loss < min(losses) or total_reward > list(best_net.keys())[0]:
-        if not best_net or total_reward >= list(best_net.keys())[0]: # In case avg_loss < min(lossses)
-            best_net = {total_reward:copy.deepcopy(agent.Qnet)}
+    next_state = torch.tensor(next_state, dtype=torch.float32, device=dev)
+    reward = torch.tensor(reward, dtype=torch.float32, device=dev)
+    done_flag = torch.tensor(term or trunc, dtype=torch.float32, device=dev)
 
-    losses.append(avg_loss)
+    loss = agent.update(state.unsqueeze(0), action, next_state.unsqueeze(0), reward, done_flag)
+    total_episode_loss += loss
+    state = next_state
+    total_episode_reward += reward.item()
+
+    if term or trunc:
+        avg_loss = total_episode_loss / (train_step - episode_start_step + 1)
+        progress_bar.desc =  f"Ep. {episode_iteration + 1}, Avg. Loss {avg_loss:3f}, Tot. R.: {total_episode_reward}"
+        if not best_net or avg_loss < min(losses) or total_episode_reward > list(best_net.keys())[0]:
+            if not best_net or total_episode_reward >= list(best_net.keys())[0]: # In case avg_loss < min(lossses)
+                best_net = {total_episode_reward:copy.deepcopy(agent.Qnet)}
+        losses.append(avg_loss)
+        
+        next_episode()
+
 # plt.plot(losses)
 # plt.xlabel('Episode')
 # plt.ylabel('Loss')
