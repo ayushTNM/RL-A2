@@ -37,15 +37,23 @@ class QNetwork(nn.Module):
 
 # Define the DQN agent
 class DQNAgent(BaseNNAgent):
-    def __init__(self, n_states, n_actions, lr, gamma, use_replay_buffer=True, replay_buffer_size=1000):
+    def __init__(self, n_states, n_actions, lr, gamma, use_replay_buffer=True, replay_buffer_size=1000, use_target_net=True, target_net_delay=1000):
         super().__init__(QNetwork(n_states, n_actions).to(dev), n_actions)
+        self.use_target_net = use_target_net
+        self.target_net_delay = target_net_delay
+        self.target_net = QNetwork(n_states, n_actions).to(dev) if use_target_net else None
         self.optimizer = optim.Adam(self.Qnet.parameters(), lr=lr)
+        self.train_step = 0
         self.loss_fn = nn.MSELoss()
         self.gamma = gamma
         self.use_replay_buffer = use_replay_buffer
         self.replay_buffer = ReplayBuffer(replay_buffer_size) if use_replay_buffer else None
 
     def update(self, state, action, next_state, reward, done):
+        self.train_step += 1
+        if self.use_target_net and self.train_step % self.target_net_delay == 0:
+            self.target_net = copy.deepcopy(self.Qnet)
+        
         if use_replay_buffer:
             self.replay_buffer.add((state, action, next_state, reward, done))
             return self.optimize_step(*self.replay_buffer.sample())
@@ -53,7 +61,10 @@ class DQNAgent(BaseNNAgent):
 
     def optimize_step(self, state, action, next_state, reward, done):
         q_values = self.Qnet(state)
-        next_q_values = self.Qnet(next_state)
+        if self.use_target_net:
+            next_q_values = self.target_net(next_state)
+        else:
+            next_q_values = self.Qnet(next_state)
 
         target = reward + self.gamma * torch.max(next_q_values).item() * (1 - done)
         target_q = q_values.clone().detach()
@@ -85,6 +96,8 @@ gamma = 0.99
 policy='egreedy'
 use_replay_buffer = True
 replay_buffer_size = 1000
+use_target_net = True
+target_net_delay = 1000
 epsilon_start = 0.1
 epsilon_decay = 0.995
 epsilon_min = 0.01
@@ -97,7 +110,8 @@ best_net = {}
 # Initialize environment and agent
 env = gym.make("CartPole-v1")
 agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, lr, gamma, \
-    use_replay_buffer=use_replay_buffer, replay_buffer_size=replay_buffer_size)
+    use_replay_buffer=use_replay_buffer, replay_buffer_size=replay_buffer_size, \
+    use_target_net=use_target_net, target_net_delay=target_net_delay)
 progress_bar = tqdm(range(num_train_steps))
 
 def next_episode():
