@@ -5,6 +5,8 @@ import gymnasium as gym
 import copy
 # import matplotlib.pyplot as plt
 from tqdm import tqdm
+import random as rn
+
 from Agent import BaseNNAgent
 
 if torch.cuda.is_available():  
@@ -35,13 +37,21 @@ class QNetwork(nn.Module):
 
 # Define the DQN agent
 class DQNAgent(BaseNNAgent):
-    def __init__(self, n_states, n_actions, lr, gamma):
+    def __init__(self, n_states, n_actions, lr, gamma, use_replay_buffer=True, replay_buffer_size=1000):
         super().__init__(QNetwork(n_states, n_actions).to(dev), n_actions)
         self.optimizer = optim.Adam(self.Qnet.parameters(), lr=lr)
         self.loss_fn = nn.MSELoss()
         self.gamma = gamma
+        self.use_replay_buffer = use_replay_buffer
+        self.replay_buffer = ReplayBuffer(replay_buffer_size) if use_replay_buffer else None
 
     def update(self, state, action, next_state, reward, done):
+        if use_replay_buffer:
+            self.replay_buffer.add((state, action, next_state, reward, done))
+            return self.optimize_step(*self.replay_buffer.sample())
+        return self.optimize_step(state, action, next_state, reward, done)
+
+    def optimize_step(self, state, action, next_state, reward, done):
         q_values = self.Qnet(state)
         next_q_values = self.Qnet(next_state)
 
@@ -55,11 +65,26 @@ class DQNAgent(BaseNNAgent):
         self.optimizer.step()
         return loss.item()
 
+class ReplayBuffer(list):
+    def __init__(self, max_size, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_size = max_size
+    
+    def add(self, e):
+        if len(self) == self.max_size:
+            self[rn.randrange(len(self))] = e
+        else:
+            self.append(e)
+    
+    def sample(self):
+        return rn.choice(self)
+
 # Hyperparameters
 lr = 0.001
 gamma = 0.99
 policy='egreedy'
-# epsilon = 0.01
+use_replay_buffer = True
+replay_buffer_size = 1000
 epsilon_start = 0.1
 epsilon_decay = 0.995
 epsilon_min = 0.01
@@ -71,7 +96,8 @@ best_net = {}
 
 # Initialize environment and agent
 env = gym.make("CartPole-v1")
-agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, lr, gamma)
+agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, lr, gamma, \
+    use_replay_buffer=use_replay_buffer, replay_buffer_size=replay_buffer_size)
 progress_bar = tqdm(range(num_train_steps))
 
 def next_episode():
@@ -100,6 +126,7 @@ for train_step in progress_bar:
     done_flag = torch.tensor(term or trunc, dtype=torch.float32, device=dev)
 
     loss = agent.update(state.unsqueeze(0), action, next_state.unsqueeze(0), reward, done_flag)
+
     total_episode_loss += loss
     state = next_state
     total_episode_reward += reward.item()
