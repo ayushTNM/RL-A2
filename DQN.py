@@ -54,7 +54,7 @@ class DQNAgent(BaseNNAgent):
         if self.use_target_net and self.train_step % self.target_net_delay == 0:
             self.target_net = copy.deepcopy(self.Qnet)
         
-        if use_replay_buffer:
+        if self.use_replay_buffer:
             self.replay_buffer.add((state, action, next_state, reward, done))
             return self.optimize_step(*self.replay_buffer.sample())
         return self.optimize_step(state, action, next_state, reward, done)
@@ -90,89 +90,77 @@ class ReplayBuffer(list):
     def sample(self):
         return rn.choice(self)
 
-# Hyperparameters
-lr = 0.001
-gamma = 0.99
-policy='egreedy'
-use_replay_buffer = True
-replay_buffer_size = 1000
-use_target_net = True
-target_net_delay = 1000
-epsilon_start = 0.1
-epsilon_decay = 0.995
-epsilon_min = 0.01
-temp = 0.1
-num_train_steps = 25000
-
-losses = []
-best_net = {}
-
-# Initialize environment and agent
-env = gym.make("CartPole-v1")
-agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, lr, gamma, \
-    use_replay_buffer=use_replay_buffer, replay_buffer_size=replay_buffer_size, \
-    use_target_net=use_target_net, target_net_delay=target_net_delay)
-progress_bar = tqdm(range(num_train_steps))
-
-def next_episode():
-    # change 'global' to 'nonlocal' if function is nested
-    global state, term, trunc, total_episode_loss, total_episode_reward, episode_start_step, episode_iteration
+def DQN(n_timesteps, learning_rate, gamma, use_replay_buffer, replay_buffer_size, use_target_net, target_net_delay, eval_interval, **action_selection_kwargs):
+    
+    env = gym.make("CartPole-v1")
+    eval_env = gym.make("CartPole-v1")
+    agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, learning_rate, gamma, \
+        use_replay_buffer=use_replay_buffer, replay_buffer_size=replay_buffer_size, \
+        use_target_net=use_target_net, target_net_delay=target_net_delay)
+    
     state = torch.tensor(env.reset()[0], dtype=torch.float32, device=dev)
     term, trunc = False, False
     total_episode_loss = 0
     total_episode_reward = 0
-    episode_start_step = _train_step
-    episode_iteration += 1
+    episode_start_step = 0
+    episode_iteration = 0
+    
+    progress_bar = tqdm(range(1, n_timesteps)) # range from 1 as we add 1 to n_timesteps in experimentation
+    eval_timesteps, eval_returns = [], []
 
-# training loop
-episode_iteration = -1
-_train_step = 0
-next_episode()
-for train_step in progress_bar:
-    _train_step = train_step
-
-    epsilon = max(epsilon_start * epsilon_decay ** episode_iteration, epsilon_min)
-    action = agent.select_action(state.unsqueeze(0), policy=policy, epsilon=epsilon, temp=temp)
-    next_state, reward, term, trunc, _ = env.step(action)
-
-    next_state = torch.tensor(next_state, dtype=torch.float32, device=dev)
-    reward = torch.tensor(reward, dtype=torch.float32, device=dev)
-    done_flag = torch.tensor(term or trunc, dtype=torch.float32, device=dev)
-
-    loss = agent.update(state.unsqueeze(0), action, next_state.unsqueeze(0), reward, done_flag)
-
-    total_episode_loss += loss
-    state = next_state
-    total_episode_reward += reward.item()
-
-    if term or trunc:
-        avg_loss = total_episode_loss / (train_step - episode_start_step + 1)
-        progress_bar.desc =  f"Ep. {episode_iteration + 1}, Avg. Loss {avg_loss:3f}, Tot. R.: {total_episode_reward}"
-        if not best_net or avg_loss < min(losses) or total_episode_reward > list(best_net.keys())[0]:
-            if not best_net or total_episode_reward >= list(best_net.keys())[0]: # In case avg_loss < min(lossses)
-                best_net = {total_episode_reward:copy.deepcopy(agent.Qnet)}
-        losses.append(avg_loss)
+    for ts in progress_bar:
+        # _train_step = ts
         
-        next_episode()
+        # If needed for annealing
+        if action_selection_kwargs['policy'].startswith('ann'):
+            action_selection_kwargs.update(dict(episode_iteration=episode_iteration))
+        
+        action = agent.select_action(state.unsqueeze(0), **action_selection_kwargs)
+        next_state, reward, term, trunc, _ = env.step(action)
 
-# plt.plot(losses)
-# plt.xlabel('Episode')
-# plt.ylabel('Loss')
-# plt.title('Loss Across Episodes')
-# plt.show()
+        next_state = torch.tensor(next_state, dtype=torch.float32, device=dev)
+        reward = torch.tensor(reward, dtype=torch.float32, device=dev)
+        done_flag = torch.tensor(term or trunc, dtype=torch.float32, device=dev)
 
-# Show best run
-env = gym.make("CartPole-v1", render_mode="human")
-agent.Qnet = list(best_net.values())[0]
-state = torch.tensor(env.reset()[0], dtype=torch.float32, device=dev)
-term, trunc = False, False
-total_reward = 0
+        loss = agent.update(state.unsqueeze(0), action, next_state.unsqueeze(0), reward, done_flag)
 
-while not term and not trunc:
-    action = agent.select_action(state.unsqueeze(0), 'greedy')
-    next_state, reward, term, trunc, _ = env.step(action)
-    next_state = torch.tensor(next_state, dtype=torch.float32, device=dev)
-    total_reward += reward
-    state = next_state
-print("Total reward:",total_reward)
-env.close()
+        total_episode_loss += loss
+        state = next_state
+        total_episode_reward += reward.item()
+        
+        if ts % eval_interval == 0:
+            eval_returns.append(agent.evaluate(eval_env,dev))
+            eval_timesteps.append(ts)
+            print(eval_returns,eval_timesteps)
+
+        if term or trunc:
+            avg_loss = total_episode_loss / (ts - episode_start_step + 1)
+            progress_bar.desc =  f"Ep it.: {episode_iteration + 1}, Avg. Loss: {avg_loss:3f}, Tot. R.: {total_episode_reward}"
+            # if not best_net or avg_loss < min(losses) or total_episode_reward > list(best_net.keys())[0]:
+            #     if not best_net or total_episode_reward >= list(best_net.keys())[0]: # In case avg_loss < min(lossses)
+            #         best_net = {total_episode_reward:copy.deepcopy(agent.Qnet)}
+            # losses.append(avg_loss)
+            
+            state = torch.tensor(env.reset()[0], dtype=torch.float32, device=dev)
+            total_episode_loss = 0
+            total_episode_reward = 0
+            episode_start_step = ts
+            episode_iteration += 1
+            
+    return eval_returns, eval_timesteps
+
+def test():
+    n_timesteps = 25000
+    gamma =0.99
+    lr = 0.001
+    use_replay_buffer = True
+    replay_buffer_size = 1000
+    use_target_net = True
+    target_net_delay = 1000
+    action_selection_kwargs = dict(policy='ann_egreedy', epsilon_start=0.1, epsilon_decay=0.995, epsilon_min=0.01)
+    eval_interval = 2500
+    
+    DQN(n_timesteps, lr, gamma, use_replay_buffer, replay_buffer_size, use_target_net, target_net_delay, eval_interval, **action_selection_kwargs)
+
+if __name__ == '__main__':
+    test()
