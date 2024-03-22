@@ -1,0 +1,11 @@
+for exploration experiments: annealing E-greedy, annealing Boltzmann, and simple E-greedy
+
+for the experiment setup:
+    - keep 25k train iterations
+    - we plot every 500 train iters, 10 repetitions of full episode evaluations (include START & END)
+    
+- compare DQN with DQN-ER, DQN-TN, DQN-ER-TN all in the same graph (with best found exploration policy)
+
+(for now) for hyperparameters and network arch choice, only reasoning
+
+(optional) if replay buffer and/or target network underperform, do separate experiment with very high learning rate such that it goes unstable without target net and/or replay buffer (also maybe switch optimizer to SGD)

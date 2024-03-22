@@ -1,0 +1,14 @@
+todo:
+
+maybe make the network simpler? (e.g. switch hidden layers to sigmoid and output layer to linear) (Sybe, if need be Ayush too)
+
+write boltzmann annealing policy (Sybe)
+
+finish the main source such that it produces a full experiment
+    - preferably with saving it in a json dictionary, with the key as name of configuration (Ayush)
+
+write a source code to plot graphs from data from the json (Sybe)
+
+actually run experiments
+
+add stuff to report
