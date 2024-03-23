@@ -8,12 +8,7 @@ By Thomas Moerland
 
 import numpy as np
 import torch
-
-def softmax(x, temp):
-    ''' Computes the softmax of vector x with temperature parameter 'temp' '''
-    x = x / temp # scale by temperature
-    z = x - max(x) # substract max to prevent overflow of softmax 
-    return np.exp(z)/np.sum(np.exp(z)) # compute softmax
+from Helper import softmax
 
 class BaseNNAgent:
 
@@ -32,7 +27,7 @@ class BaseNNAgent:
             
             # In case od annealing
             if kwargs['policy'].startswith("ann"):
-                kwargs["epsilon"] = max(kwargs['epsilon_start'] * kwargs['epsilon_decay'] ** kwargs['episode_iteration'], kwargs['epsilon_min'])
+                kwargs["epsilon"] = max(kwargs['epsilon_start'] * kwargs['epsilon_decay'] ** kwargs['episode'], kwargs['epsilon_min'])
 
             if 'egreedy' in kwargs['policy']:
                 if 'epsilon' not in kwargs or kwargs['epsilon'] is None:
@@ -53,7 +48,7 @@ class BaseNNAgent:
         raise NotImplementedError('For each agent you need to implement its specific back-up method') # Leave this and overwrite in subclasses in other files
 
 
-    def evaluate(self,eval_env, dev, n_eval_episodes=10, max_episode_length=100):
+    def evaluate(self,eval_env, dev, n_eval_episodes=10):
         returns = []  # list to store the reward per episode
         for i in range(n_eval_episodes):
             s = torch.tensor(eval_env.reset()[0], dtype=torch.float32, device=dev)

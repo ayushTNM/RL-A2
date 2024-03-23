@@ -90,7 +90,7 @@ class ReplayBuffer(list):
     def sample(self):
         return rn.choice(self)
 
-def DQN(n_timesteps, learning_rate, gamma, use_replay_buffer, replay_buffer_size, use_target_net, target_net_delay, eval_interval, **action_selection_kwargs):
+def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, use_replay_buffer=True, replay_buffer_size=1000, use_target_net=True, target_net_delay=100, eval_interval=2500):
     
     env = gym.make("CartPole-v1")
     eval_env = gym.make("CartPole-v1")
@@ -103,9 +103,10 @@ def DQN(n_timesteps, learning_rate, gamma, use_replay_buffer, replay_buffer_size
     total_episode_loss = 0
     total_episode_reward = 0
     episode_start_step = 0
-    episode_iteration = 0
+    episode = 0
     
-    progress_bar = tqdm(range(1, n_timesteps)) # range from 1 as we add 1 to n_timesteps in experimentation
+    progress_bar = tqdm(range(1, n_timesteps), desc =  f"Ep: {episode + 1}, Avg. Loss: None, Tot. Rew.: None", \
+        bar_format='{l_bar}{bar}| Ts.: {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')
     eval_timesteps, eval_returns = [], []
 
     for ts in progress_bar:
@@ -113,7 +114,7 @@ def DQN(n_timesteps, learning_rate, gamma, use_replay_buffer, replay_buffer_size
         
         # If needed for annealing
         if action_selection_kwargs['policy'].startswith('ann'):
-            action_selection_kwargs.update(dict(episode_iteration=episode_iteration))
+            action_selection_kwargs.update(dict(episode=episode))
         
         action = agent.select_action(state.unsqueeze(0), **action_selection_kwargs)
         next_state, reward, term, trunc, _ = env.step(action)
@@ -131,11 +132,12 @@ def DQN(n_timesteps, learning_rate, gamma, use_replay_buffer, replay_buffer_size
         if ts % eval_interval == 0:
             eval_returns.append(agent.evaluate(eval_env,dev))
             eval_timesteps.append(ts)
-            print(eval_returns,eval_timesteps)
+            # print(eval_returns,eval_timesteps)
 
         if term or trunc:
             avg_loss = total_episode_loss / (ts - episode_start_step + 1)
-            progress_bar.desc =  f"Ep it.: {episode_iteration + 1}, Avg. Loss: {avg_loss:3f}, Tot. R.: {total_episode_reward}"
+            progress_bar.desc =  f"Ep: {episode + 1}, Avg. Loss: {avg_loss:3f}, Tot. Rew.: {total_episode_reward}"
+            # progress_bar.bar_format='{l_bar}{bar}| ep: '+str(episode)+', ts: {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
             # if not best_net or avg_loss < min(losses) or total_episode_reward > list(best_net.keys())[0]:
             #     if not best_net or total_episode_reward >= list(best_net.keys())[0]: # In case avg_loss < min(lossses)
             #         best_net = {total_episode_reward:copy.deepcopy(agent.Qnet)}
@@ -145,7 +147,7 @@ def DQN(n_timesteps, learning_rate, gamma, use_replay_buffer, replay_buffer_size
             total_episode_loss = 0
             total_episode_reward = 0
             episode_start_step = ts
-            episode_iteration += 1
+            episode += 1
             
     return eval_returns, eval_timesteps
 
@@ -156,11 +158,11 @@ def test():
     use_replay_buffer = True
     replay_buffer_size = 1000
     use_target_net = True
-    target_net_delay = 1000
+    target_net_delay = 100
     action_selection_kwargs = dict(policy='ann_egreedy', epsilon_start=0.1, epsilon_decay=0.995, epsilon_min=0.01)
     eval_interval = 2500
     
-    DQN(n_timesteps, lr, gamma, use_replay_buffer, replay_buffer_size, use_target_net, target_net_delay, eval_interval, **action_selection_kwargs)
+    DQN(n_timesteps, lr, gamma, action_selection_kwargs, use_replay_buffer, replay_buffer_size, use_target_net, target_net_delay, eval_interval)
 
 if __name__ == '__main__':
     test()
