@@ -105,12 +105,14 @@ def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, use_replay_b
     episode_start_step = 0
     episode = 0
     
-    progress_bar = tqdm(range(1, n_timesteps), desc =  f"Ep: {episode + 1}, Avg. Loss: None, Tot. Rew.: None", \
+    progress_bar = tqdm(range(n_timesteps), desc =  f"Ep: {episode + 1}, Avg. Loss: None, Tot. Rew.: None", \
         bar_format='{l_bar}{bar}| Ts.: {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')
     eval_timesteps, eval_returns = [], []
 
     for ts in progress_bar:
-        # _train_step = ts
+        if ts % eval_interval == 0:
+            eval_returns.append(agent.evaluate(eval_env,dev))
+            eval_timesteps.append(ts)
         
         # If needed for annealing
         if action_selection_kwargs['policy'].startswith('ann'):
@@ -128,11 +130,6 @@ def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, use_replay_b
         total_episode_loss += loss
         state = next_state
         total_episode_reward += reward.item()
-        
-        if ts % eval_interval == 0:
-            eval_returns.append(agent.evaluate(eval_env,dev))
-            eval_timesteps.append(ts)
-            # print(eval_returns,eval_timesteps)
 
         if term or trunc:
             avg_loss = total_episode_loss / (ts - episode_start_step + 1)

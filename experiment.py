@@ -37,10 +37,10 @@ def average_over_repetitions(n_repetitions, n_timesteps, learning_rate, gamma, a
     return learning_curve, timesteps
 
 
-def experiment():
+def experiment(experiment_comment=None, overwrite=False):
     # Settings
     # Experiment
-    n_repetitions = 2
+    n_repetitions = 5
     smoothing_window = 9  # Must be an odd number. Use 'None' to switch smoothing off!
     
     # Exploration
@@ -49,7 +49,7 @@ def experiment():
     hp = dict(n_timesteps = 25001, eval_interval = 500, learning_rate = 0.001, gamma = 1.0, action_selection_kwargs=action_selection_kwargs)
     
     # parameters of different runs to save for plotting
-    runs_kwargs = [dict(use_replay_buffer=False, use_target_net=False),\
+    runs_kwargs = [dict(use_replay_buffer=False, use_target_net=False)],\
                 dict(use_replay_buffer=True, replay_buffer_size=1000, use_target_net=False),\
                 dict(use_replay_buffer=False, use_target_net=True, target_net_delay=100),
                 dict(use_replay_buffer=True, replay_buffer_size=1000, use_target_net=True, target_net_delay=100)]
@@ -69,20 +69,21 @@ def experiment():
     
     for params in runs_kwargs:
         
-        config = "DQN"
+        config = "DQN" if experiment_comment is None else "DQN_" + experiment_comment
         if "use_replay_buffer" in params and params["use_replay_buffer"]:
-            config += f"_rb_{params["replay_buffer_size"]}"
+            config += f"_rb_{params['replay_buffer_size']}"
         if "use_target_net" in params and params["use_target_net"]:
-            config += f"_rb_{params["target_net_delay"]}"
+            config += f"_tn_{params['target_net_delay']}"
 
-        if config in data:
+        if config in data and not overwrite:
+            print(f'Configuration {config} already found, skipping..')
             continue
         
         learning_curve, timesteps = average_over_repetitions(n_repetitions, **hp, smoothing_window=smoothing_window)
         data.update({config:{**hp,"results":np.column_stack([timesteps, learning_curve]).tolist()}})
         
         with open(data_path, "w") as file:
-            json.dump(data, file)
+            json.dump(data, file, indent=2)
     
 if __name__ == '__main__':
     experiment()
