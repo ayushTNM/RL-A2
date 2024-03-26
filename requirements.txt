@@ -1,2 +1,5 @@
 gymnasium
 torch
+tqdm
+matplotlib
+scipy
