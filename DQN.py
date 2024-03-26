@@ -156,7 +156,8 @@ def test():
     replay_buffer_size = 1000
     use_target_net = True
     target_net_delay = 100
-    action_selection_kwargs = dict(policy='ann_egreedy', epsilon_start=0.1, epsilon_decay=0.995, epsilon_min=0.01)
+    # action_selection_kwargs = dict(policy='ann_egreedy', epsilon_start=0.1, epsilon_decay=0.995, epsilon_min=0.01)
+    action_selection_kwargs = dict(policy='ann_softmax', temp_start=1, temp_decay=0.995, temp_min=0.01)
     eval_interval = 2500
     
     DQN(n_timesteps, lr, gamma, action_selection_kwargs, use_replay_buffer, replay_buffer_size, use_target_net, target_net_delay, eval_interval)

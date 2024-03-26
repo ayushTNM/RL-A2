@@ -25,7 +25,7 @@ class BaseNNAgent:
             # Greedy action
             a = torch.argmax(q_values).item()
             
-            # In case od annealing
+            # In case of annealing
             if kwargs['policy'].startswith("ann"):
                 kwargs["epsilon"] = max(kwargs['epsilon_start'] * kwargs['epsilon_decay'] ** kwargs['episode'], kwargs['epsilon_min'])
 
@@ -36,21 +36,18 @@ class BaseNNAgent:
                     # Explore: choose a random action with probability epsilon
                     a = np.random.choice(np.delete(np.arange(self.n_actions), a))
                         
-        elif 'ann_softmax' in kwargs['policy']:
+        elif 'softmax' in kwargs['policy']:
             if kwargs["temp"] is None:
                 raise KeyError("Provide a temperature")
 
+            # In case of annealing
+            if kwargs['policy'].startswith("ann"):
+                kwargs["temp"] = max(kwargs['temp_start'] * kwargs['temp_decay'] ** kwargs['episode'], kwargs['temp_min'])
+
             a = np.random.choice(self.n_actions,p=softmax(q_values,kwargs["temp"]))
 
-        elif 'softmax_annealing' in kwargs['policy']:
-            if 'temp' not in kwargs or kwargs['temp'] is None:
-                raise KeyError("Provide an temp")
-            
-            #TODO add annealing
-            a = np.random.choice(self.n_actions,p=softmax(q_values,kwargs["temp"]))
-            
         return a
-        
+
     def update(self):
         raise NotImplementedError('For each agent you need to implement its specific back-up method') # Leave this and overwrite in subclasses in other files
 
