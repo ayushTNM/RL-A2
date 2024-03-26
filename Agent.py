@@ -37,12 +37,12 @@ class BaseNNAgent:
                     a = np.random.choice(np.delete(np.arange(self.n_actions), a))
                         
         elif 'softmax' in kwargs['policy']:
-            if kwargs["temp"] is None:
-                raise KeyError("Provide a temperature")
-
             # In case of annealing
             if kwargs['policy'].startswith("ann"):
                 kwargs["temp"] = max(kwargs['temp_start'] * kwargs['temp_decay'] ** kwargs['episode'], kwargs['temp_min'])
+
+            if kwargs["temp"] is None:
+                raise KeyError("Provide a temperature")
 
             a = np.random.choice(self.n_actions,p=softmax(q_values,kwargs["temp"]))
 
