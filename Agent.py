@@ -47,12 +47,7 @@ class BaseNNAgent:
                 raise KeyError("Provide an temp")
             
             #TODO add #annealing
-            temp = kwargs['temp']
-            dist = np.zeros(self.n_actions)
-            denom_sum = np.sum([np.exp(self.Q_sa[s][a]/temp) for a in range(self.n_actions)])
-            for a in range(self.n_actions):
-                dist[a] = np.exp(self.Q_sa[s][a]/temp) / denom_sum
-            a = np.random.choice(self.n_actions, p=dist)
+            a = np.random.choice(self.n_actions,p=softmax(q_values,kwargs["temp"]))
             
         return a
         
