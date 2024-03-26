@@ -36,7 +36,7 @@ class BaseNNAgent:
                     # Explore: choose a random action with probability epsilon
                     a = np.random.choice(np.delete(np.arange(self.n_actions), a))
                         
-        elif 'softmax' in kwargs['policy']:
+        elif 'ann_softmax' in kwargs['policy']:
             if kwargs["temp"] is None:
                 raise KeyError("Provide a temperature")
 
@@ -46,7 +46,7 @@ class BaseNNAgent:
             if 'temp' not in kwargs or kwargs['temp'] is None:
                 raise KeyError("Provide an temp")
             
-            #TODO add #annealing
+            #TODO add annealing
             a = np.random.choice(self.n_actions,p=softmax(q_values,kwargs["temp"]))
             
         return a
