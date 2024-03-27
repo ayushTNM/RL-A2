@@ -50,9 +50,6 @@ def softmax(x, temp):
     xn = x.numpy()
     xn = xn / temp # scale by temperature
     z = x - max(x) # substract max to prevent overflow of softmax 
-    # ez = np.exp(z)
-    # sez = torch.sum(ez)
-    # es = (ez/sez)[0]
     return (np.exp(z)/torch.sum(np.exp(z)))[0] # compute softmax
 
 def argmax(x):
