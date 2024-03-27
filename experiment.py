@@ -49,7 +49,7 @@ def experiment(experiment_comment=None, overwrite=False):
     hp = dict(n_timesteps = 25001, eval_interval = 500, learning_rate = 0.001, gamma = 1.0, action_selection_kwargs=action_selection_kwargs)
     
     # parameters of different runs to save for plotting
-    runs_kwargs = [dict(use_replay_buffer=False, use_target_net=False)],\
+    runs_kwargs = [dict(use_replay_buffer=False, use_target_net=False),\
                 dict(use_replay_buffer=True, replay_buffer_size=1000, use_target_net=False),\
                 dict(use_replay_buffer=False, use_target_net=True, target_net_delay=100),
                 dict(use_replay_buffer=True, replay_buffer_size=1000, use_target_net=True, target_net_delay=100)]
