@@ -9,6 +9,7 @@ By Thomas Moerland
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
+import torch
 
 class LearningCurvePlot:
 
@@ -46,9 +47,13 @@ def smooth(y, window, poly=2):
 
 def softmax(x, temp):
     ''' Computes the softmax of vector x with temperature parameter 'temp' '''
-    x = x / temp # scale by temperature
+    xn = x.numpy()
+    xn = xn / temp # scale by temperature
     z = x - max(x) # substract max to prevent overflow of softmax 
-    return np.exp(z)/np.sum(np.exp(z)) # compute softmax
+    # ez = np.exp(z)
+    # sez = torch.sum(ez)
+    # es = (ez/sez)[0]
+    return (np.exp(z)/torch.sum(np.exp(z)))[0] # compute softmax
 
 def argmax(x):
     ''' Own variant of np.argmax with random tie breaking '''
