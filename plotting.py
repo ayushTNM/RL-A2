@@ -8,8 +8,8 @@ from Helper import LearningCurvePlot
 
 # func to plot
 
-#TODO add option for boolean values
-def plot_hyperparameter(data, names, title, param_name, param_key, filename):
+#TODO experiment code is not made to do these experiments
+def plot_hyperparameter(data, names, title, filename, param_name, param_key):
     plot = LearningCurvePlot(title)
     for name in names:
         experiment = data[name]
@@ -28,11 +28,38 @@ def plot_compare_tn_rb(data, names, title, filename):
         result = np.array(experiment['results']).T
         x = result[0]
         y = result[1]
-        label = "DQN"
-        if "tn" in name:
-            label += " with Target Network on"
-        if "rb" in name:
-            label += " with Replay Buffer on"
+        if "tn" in name and "rb" in name: #TODO make dependant on actual settings, not on name
+            label = "DQN with target network and replay buffer"
+        elif "tn" in name: #TODO make this prettier
+            label += "DQN with target network"
+        elif "rb" in name:
+            label += "DQN with replay buffer"
+        else:
+            label = "Default DQN"
+
+        plot.add_curve(x, y, label)
+    plot.save(filename)
+
+def plot_action_select(data, names, title, filename):
+    plot = LearningCurvePlot(title)
+    for name in names:
+        experiment = data[name]
+        result = np.array(experiment['results']).T
+        x = result[0]
+        y = result[1]
+        
+        action_selection_kwargs = experiment["action_selection_kwargs"]
+        policy = action_selection_kwargs["policy"]
+        if policy == "egreedy":
+            label = "ε-greedy"
+        elif policy == "ann_egreedy":
+            label = "Annealing ε-greedy"
+        elif policy == "softmax":
+            label = "Softmax"
+        elif policy == "ann_softmax":
+            label = "Annealing softmax" 
+        else:
+            label = ""
         plot.add_curve(x, y, label)
     plot.save(filename)
 
@@ -43,14 +70,23 @@ def plot_experiments():
     experiments = extract(data)
     
     # plot 1 Learning rate
-    names = ['DQN', 'DQN_rb_1000']
-    title, param_key, param_name = "Learning rate compared of DQN agents", "learning_rate", "Learning rate"
-    plot_hyperparameter(data, names, title, param_name, param_key, "lr.png")
+    names = ['DQN', 'DQN_lr_0.005', 'DQN_lr_0.01']
+    title = "Learning rate compared of DQN agents"
+    param_key = "learning_rate"
+    param_name_show = "Learning rate"
+    plot_hyperparameter(data, names, title, "lr.png", param_name_show, param_key)
 
     # plot 2
-    names = ['DQN', 'DQN_rb_1000', 'DQN_tn_100', 'DQN_rb_1000_tn_100']
+    names = ['DQN', 'DQN_rb', 'DQN_tn', 'DQN_rb_tn']
     title = "Target Network and Replay Buffer compared"
-    plot_compare_tn_rb(data, names, title, "TN RB compared.png")
+    plot_compare_tn_rb(data, names, title, "tn_rb_compared.png")
+
+    #plot 3 
+    names = ['DQN', 'DQN_as_softmax', 'DQN_as_egreedy', 'DQN_as_annsoftmax']
+    title = "Different action selection methods compared"
+    plot_action_select(data, names, title, "Action_select_compared")
+
+
 
     print()
 
@@ -58,7 +94,6 @@ def extract(data):
     experiments = []
     for key in data.keys():
         experiment = data[key]
-        experiment['name'] = key
         experiments.append(experiment)
     return experiments
 
