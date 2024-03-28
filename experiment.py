@@ -15,7 +15,7 @@ from DQN import DQN
 from Helper import smooth
 
 
-def average_over_repetitions(n_repetitions, n_timesteps, learning_rate, gamma, action_selection_kwargs, use_replay_buffer=True, replay_buffer_size=1000, use_target_net=True, target_net_delay=100, smoothing_window=None, eval_interval=500):
+def average_over_repetitions(n_repetitions, n_timesteps, learning_rate, gamma, action_selection_kwargs, use_replay_buffer=True, replay_buffer_size=1000, use_target_net=True, target_net_delay=100, smoothing_window=None, eval_interval=500, name=None):
 
     returns_over_repetitions = []
     now = time.time()
@@ -37,7 +37,6 @@ def average_over_repetitions(n_repetitions, n_timesteps, learning_rate, gamma, a
     return learning_curve, timesteps
 
 
-def experiment(experiment_comment=None, overwrite=False):
     # Settings
     # Experiment
     n_repetitions = 5
@@ -84,6 +83,71 @@ def experiment(experiment_comment=None, overwrite=False):
         
         with open(data_path, "w") as file:
             json.dump(data, file, indent=2)
+
+def experiment(experiment_comment=None, overwrite=False):
+    # Settings
+    # Experiment
+    n_repetitions = 5
+    smoothing_window = 9  # Must be an odd number. Use 'None' to switch smoothing off!
     
+    # Exploration, standard action selection kwargs
+    action_selection_kwargs = dict(policy='ann_egreedy', epsilon_start=0.1, epsilon_decay=0.995, epsilon_min=0.01)
+
+    # standard hyperparameters
+    hp = dict(n_timesteps = 25001, eval_interval = 500, learning_rate = 0.001, gamma = 1.0, action_selection_kwargs=action_selection_kwargs, use_replay_buffer=False, replay_buffer_size=1000, use_target_net=False, target_net_delay=100)
+    
+    #for the action runs different act sel kwargs
+    egreedy_as_kwargs = dict(policy='egreedy', epsilon=0.1)
+    softmax_as_kwargs = dict(policy='softmax', temp=1)
+    ann_softmax_as_kwargs = dict(policy='ann_softmax', temp_start=1, temp_decay=0.998, temp_min=0.1)    
+
+ 
+
+    # For every run set the hps that must overwrite the standards hps, also set a name for the run
+    runs_kwargs = [
+                #runs to compare with/without rb and tn
+                dict(name="DQN", use_replay_buffer=False, use_target_net=False),#standard run, used in all experiments 
+                dict(name="DQN_rb", use_replay_buffer=True, replay_buffer_size=1000, use_target_net=False),\
+                dict(name="DQN_tn", use_replay_buffer=False, use_target_net=True, target_net_delay=100),
+                dict(name="DQN_rb_tn", use_replay_buffer=True, replay_buffer_size=1000, use_target_net=True, target_net_delay=100,),
+                #runs to compare learning rate
+                dict(name="DQN_lr_0.005", learning_rate=0.005),
+                dict(name="DQN_lr_0.01", learning_rate=0.01),
+                # runs to compare action selection
+                dict(name="DQN_as_softmax", action_selection_kwargs=softmax_as_kwargs),
+                dict(name="DQN_as_egreedy", action_selection_kwargs=egreedy_as_kwargs),
+                dict(name="DQN_as_annsoftmax", action_selection_kwargs=ann_softmax_as_kwargs)
+]
+    
+    # Define the path to the JSON file
+    data_path = "data.json"
+
+    # Check if the file exists
+    if os.path.exists(data_path):
+        # Load the JSON file
+        with open(data_path, 'r') as file:
+            data = json.load(file)
+        print("JSON file loaded successfully.")
+    else:
+        data = {}
+        print("JSON file does not exist.")
+    
+    for params in runs_kwargs:
+        
+        name = params["name"]
+
+        if name in data and not overwrite:
+            print(f'Configuration {name} already found, skipping..')
+            continue
+
+        new_params = {**hp, **params}
+        
+        learning_curve, timesteps = average_over_repetitions(n_repetitions, **new_params, smoothing_window=smoothing_window)
+        data.update({name:{**new_params,"results":np.column_stack([timesteps, learning_curve]).tolist()}})
+        
+        with open(data_path, "w") as file:
+            json.dump(data, file, indent=2)
+
+
 if __name__ == '__main__':
-    experiment()
+    experiment(overwrite=True)
