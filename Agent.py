@@ -43,8 +43,9 @@ class BaseNNAgent:
 
             if kwargs["temp"] is None:
                 raise KeyError("Provide a temperature")
-
-            a = np.random.choice(self.n_actions,p=softmax(q_values,kwargs["temp"]))
+            # print(torch.softmax(q_values.cpu()[0]/kwargs["temp"], dim=0))
+            # print(torch.softmax(q_values.cpu()[0]/kwargs["temp"], dim=0).sum())
+            a = np.random.choice(self.n_actions,p=torch.softmax(q_values.cpu()/kwargs["temp"], dim=0).numpy())
 
         return a
 

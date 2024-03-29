@@ -9,19 +9,16 @@ import random as rn
 
 from Agent import BaseNNAgent
 
-if torch.cuda.is_available():  
-  dev = torch.device("cuda:0")
-else:  
-  dev = torch.device("cpu")
+dev = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 print(dev)
 
 # Define the neural network architecture
 class QNetwork(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
-        self.linear1 = nn.Linear(input_dim, 32)
-        self.linear2 = nn.Linear(32, 32)
-        self.output_layer = nn.Linear(32, output_dim)
+        self.linear1 = nn.Linear(input_dim, 128)
+        self.linear2 = nn.Linear(128, 128)
+        self.output_layer = nn.Linear(128, output_dim)
 
         # Initialization using Xavier
         nn.init.xavier_uniform_(self.linear1.weight)
@@ -29,46 +26,41 @@ class QNetwork(nn.Module):
         nn.init.xavier_uniform_(self.output_layer.weight)
 
     def forward(self, inputs):
-        # Forward pass through the layers
-        x = torch.selu(self.linear1(inputs))
-        x = torch.selu(self.linear2(x))
+        # Forward pass through the layers with sigmoid activation
+        x = torch.relu(self.linear1(inputs))
+        x = torch.relu(self.linear2(x))
         x = self.output_layer(x)
         return x
 
 # Define the DQN agent
 class DQNAgent(BaseNNAgent):
-    def __init__(self, n_states, n_actions, lr, gamma, use_replay_buffer=True, replay_buffer_size=1000, use_target_net=True, target_net_delay=1000):
-        super().__init__(QNetwork(n_states, n_actions).to(dev), n_actions)
-        self.use_target_net = use_target_net
+    def __init__(self, n_states, n_actions, lr, gamma, replay_buffer_size=None, target_net_delay=None):
+        super().__init__(QNetwork(n_states,n_actions).to(dev), n_actions)
         self.target_net_delay = target_net_delay
-        self.target_net = QNetwork(n_states, n_actions).to(dev) if use_target_net else None
+        self.target_net = copy.deepcopy(self.Qnet) if target_net_delay is not None else None
         self.optimizer = optim.Adam(self.Qnet.parameters(), lr=lr)
         self.train_step = 0
         self.loss_fn = nn.MSELoss()
         self.gamma = gamma
-        self.use_replay_buffer = use_replay_buffer
-        self.replay_buffer = ReplayBuffer(replay_buffer_size) if use_replay_buffer else None
+        self.replay_buffer = ReplayBuffer(replay_buffer_size) if replay_buffer_size else None
 
     def update(self, state, action, next_state, reward, done):
         self.train_step += 1
-        if self.use_target_net and self.train_step % self.target_net_delay == 0:
+        if self.target_net and self.train_step % self.target_net_delay == 0:
             self.target_net = copy.deepcopy(self.Qnet)
         
-        if self.use_replay_buffer:
+        if self.replay_buffer:
             self.replay_buffer.add((state, action, next_state, reward, done))
             return self.optimize_step(*self.replay_buffer.sample())
         return self.optimize_step(state, action, next_state, reward, done)
 
     def optimize_step(self, state, action, next_state, reward, done):
         q_values = self.Qnet(state)
-        if self.use_target_net:
-            next_q_values = self.target_net(next_state)
-        else:
-            next_q_values = self.Qnet(next_state)
-
-        target = reward + self.gamma * torch.max(next_q_values).item() * (1 - done)
+        
+        next_q_values = self.target_net(next_state) if self.target_net else self.Qnet(next_state)
+            
         target_q = q_values.clone().detach()
-        target_q[0][action] = target
+        target_q[action] = reward + self.gamma * torch.max(next_q_values).item() * (1 - done)
 
         self.optimizer.zero_grad()
         loss = self.loss_fn(q_values, target_q)
@@ -90,13 +82,13 @@ class ReplayBuffer(list):
     def sample(self):
         return rn.choice(self)
 
-def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, use_replay_buffer=True, replay_buffer_size=1000, use_target_net=True, target_net_delay=100, eval_interval=2500):
+def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, replay_buffer_size=None, target_net_delay=None, eval_interval=2500):
     
     env = gym.make("CartPole-v1")
     eval_env = gym.make("CartPole-v1")
     agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, learning_rate, gamma, \
-        use_replay_buffer=use_replay_buffer, replay_buffer_size=replay_buffer_size, \
-        use_target_net=use_target_net, target_net_delay=target_net_delay)
+        replay_buffer_size=replay_buffer_size, \
+        target_net_delay=target_net_delay)
     
     state = torch.tensor(env.reset()[0], dtype=torch.float32, device=dev)
     term, trunc = False, False
@@ -108,6 +100,7 @@ def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, use_replay_b
     progress_bar = tqdm(range(n_timesteps), desc =  f"Ep: {episode + 1}, Avg. Loss: None, Tot. Rew.: None", \
         bar_format='{l_bar}{bar}| Ts.: {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')
     eval_timesteps, eval_returns = [], []
+    best_total_reward = 0
 
     for ts in progress_bar:
         if ts % eval_interval == 0:
@@ -118,14 +111,14 @@ def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, use_replay_b
         if action_selection_kwargs['policy'].startswith('ann'):
             action_selection_kwargs.update(dict(episode=episode))
         
-        action = agent.select_action(state.unsqueeze(0), **action_selection_kwargs)
+        action = agent.select_action(state, **action_selection_kwargs)
         next_state, reward, term, trunc, _ = env.step(action)
 
         next_state = torch.tensor(next_state, dtype=torch.float32, device=dev)
         reward = torch.tensor(reward, dtype=torch.float32, device=dev)
         done_flag = torch.tensor(term or trunc, dtype=torch.float32, device=dev)
 
-        loss = agent.update(state.unsqueeze(0), action, next_state.unsqueeze(0), reward, done_flag)
+        loss = agent.update(state, action, next_state, reward, done_flag)
 
         total_episode_loss += loss
         state = next_state
@@ -133,7 +126,8 @@ def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, use_replay_b
 
         if term or trunc:
             avg_loss = total_episode_loss / (ts - episode_start_step + 1)
-            progress_bar.desc =  f"Ep: {episode + 1}, Avg. Loss: {avg_loss:3f}, Tot. Rew.: {total_episode_reward}"
+            if total_episode_reward > best_total_reward: best_total_reward = total_episode_reward
+            progress_bar.desc =  f"Ep: {episode + 1}, Avg. Loss: {avg_loss:3f}, Tot. Rew.: {total_episode_reward}, Best Tot. Rew.: {best_total_reward}"
             # progress_bar.bar_format='{l_bar}{bar}| ep: '+str(episode)+', ts: {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
             # if not best_net or avg_loss < min(losses) or total_episode_reward > list(best_net.keys())[0]:
             #     if not best_net or total_episode_reward >= list(best_net.keys())[0]: # In case avg_loss < min(lossses)
@@ -152,15 +146,12 @@ def test():
     n_timesteps = 25000
     gamma =0.99
     lr = 0.001
-    use_replay_buffer = True
     replay_buffer_size = 1000
-    use_target_net = True
     target_net_delay = 100
-    # action_selection_kwargs = dict(policy='ann_egreedy', epsilon_start=0.1, epsilon_decay=0.995, epsilon_min=0.01)
-    action_selection_kwargs = dict(policy='ann_softmax', temp_start=1, temp_decay=0.998, temp_min=0.01, temp=1)
+    action_selection_kwargs = dict(policy='ann_egreedy', epsilon_start=0.1, epsilon_decay=0.995, epsilon_min=0.01)
     eval_interval = 2500
     
-    DQN(n_timesteps, lr, gamma, action_selection_kwargs, use_replay_buffer, replay_buffer_size, use_target_net, target_net_delay, eval_interval)
+    DQN(n_timesteps, lr, gamma, action_selection_kwargs, replay_buffer_size, target_net_delay, eval_interval)
 
 if __name__ == '__main__':
     test()
