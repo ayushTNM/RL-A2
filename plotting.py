@@ -31,9 +31,9 @@ def plot_compare_tn_rb(data, names, title, filename):
         if "tn" in name and "rb" in name: #TODO make dependant on actual settings, not on name
             label = "DQN with target network and replay buffer"
         elif "tn" in name: #TODO make this prettier
-            label += "DQN with target network"
+            label = "DQN with target network"
         elif "rb" in name:
-            label += "DQN with replay buffer"
+            label = "DQN with replay buffer"
         else:
             label = "Default DQN"
 
