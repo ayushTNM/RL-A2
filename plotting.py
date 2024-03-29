@@ -67,7 +67,6 @@ def plot_action_select(data, names, title, filename):
 # code to plot experiments
 def plot_experiments():
     data = load_data("data.json")
-    experiments = extract(data)
     
     # plot 1 Learning rate
     names = ['DQN', 'DQN_lr_0.005', 'DQN_lr_0.01']
@@ -89,13 +88,6 @@ def plot_experiments():
 
 
     print()
-
-def extract(data):
-    experiments = []
-    for key in data.keys():
-        experiment = data[key]
-        experiments.append(experiment)
-    return experiments
 
 def load_data(data_path):
     if os.path.exists(data_path):

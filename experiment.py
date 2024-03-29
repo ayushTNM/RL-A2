@@ -135,6 +135,7 @@ def experiment(experiment_comment=None, overwrite=False):
     for params in runs_kwargs:
         
         name = params["name"]
+        print(name)
 
         if name in data and not overwrite:
             print(f'Configuration {name} already found, skipping..')
@@ -150,4 +151,4 @@ def experiment(experiment_comment=None, overwrite=False):
 
 
 if __name__ == '__main__':
-    experiment(overwrite=True)
+    experiment(overwrite=False)
