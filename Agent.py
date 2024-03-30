@@ -8,7 +8,6 @@ By Thomas Moerland
 
 import numpy as np
 import torch
-from Helper import softmax
 
 class BaseNNAgent:
 
@@ -16,7 +15,7 @@ class BaseNNAgent:
         self.Qnet = Qnet
         self.n_actions = n_actions
         
-    def select_action(self, s, **kwargs):
+    def select_action(self, s, episode = None, **kwargs):
           
         with torch.no_grad():
             q_values = self.Qnet(s)
@@ -27,7 +26,9 @@ class BaseNNAgent:
             
             # In case of annealing
             if kwargs['policy'].startswith("ann"):
-                kwargs["epsilon"] = max(kwargs['epsilon_start'] * kwargs['epsilon_decay'] ** kwargs['episode'], kwargs['epsilon_min'])
+                if episode == None:
+                    raise ValueError("Provide episode")
+                kwargs["epsilon"] = max(kwargs['epsilon_start'] * kwargs['epsilon_decay'] ** episode, kwargs['epsilon_min'])
 
             if 'egreedy' in kwargs['policy']:
                 if 'epsilon' not in kwargs or kwargs['epsilon'] is None:
@@ -39,12 +40,13 @@ class BaseNNAgent:
         elif 'softmax' in kwargs['policy']:
             # In case of annealing
             if kwargs['policy'].startswith("ann"):
-                kwargs["temp"] = max(kwargs['temp_start'] * kwargs['temp_decay'] ** kwargs['episode'], kwargs['temp_min'])
+                if episode == None:
+                    raise ValueError("Provide episode")
+                kwargs["temp"] = max(kwargs['temp_start'] * kwargs['temp_decay'] ** episode, kwargs['temp_min'])
 
             if kwargs["temp"] is None:
                 raise KeyError("Provide a temperature")
-            # print(torch.softmax(q_values.cpu()[0]/kwargs["temp"], dim=0))
-            # print(torch.softmax(q_values.cpu()[0]/kwargs["temp"], dim=0).sum())
+
             a = np.random.choice(self.n_actions,p=torch.softmax(q_values.cpu()/kwargs["temp"], dim=0).numpy())
 
         return a
@@ -55,7 +57,7 @@ class BaseNNAgent:
 
     def evaluate(self,eval_env, dev, n_eval_episodes=10):
         returns = []  # list to store the reward per episode
-        for i in range(n_eval_episodes):
+        for _ in range(n_eval_episodes):
             s = torch.tensor(eval_env.reset()[0], dtype=torch.float32, device=dev)
             R_ep = 0
             term,trunc = False, False

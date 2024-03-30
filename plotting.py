@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import json
+import re
 
 from Helper import smooth
 from Helper import LearningCurvePlot
@@ -8,94 +9,50 @@ from Helper import LearningCurvePlot
 
 # func to plot
 
-#TODO experiment code is not made to do these experiments
-def plot_hyperparameter(data, names, title, filename, param_name, param_key):
+def plot_hyperparameter(data, names, title, filename, param_names, param_keys):
     plot = LearningCurvePlot(title)
     for name in names:
-        experiment = data[name]
-        result = np.array(experiment['results']).T
-        x = result[0]
-        y = result[1]
-        param = experiment[param_key]
-        label = param_name + ": " + str(param)
-        plot.add_curve(x, y, label)
-    plot.save(filename)
+        if name in data:
+            experiment = data[name]
+            result = experiment['results'].T
+            x = result[0]
+            y = result[1]
 
-def plot_compare_tn_rb(data, names, title, filename):
-    plot = LearningCurvePlot(title)
-    for name in names:
-        experiment = data[name]
-        result = np.array(experiment['results']).T
-        x = result[0]
-        y = result[1]
-        if "tn" in name and "rb" in name: #TODO make dependant on actual settings, not on name
-            label = "DQN with target network and replay buffer"
-        elif "tn" in name: #TODO make this prettier
-            label = "DQN with target network"
-        elif "rb" in name:
-            label = "DQN with replay buffer"
+            if "policy" in param_names:
+                label = ', '.join(f"{pn} : {list(experiment[pk].values())[0]}" for pn,pk in zip(param_names,param_keys))
+                label = label.replace("egreedy","ϵ-greedy").replace("ann_", "ann. ")
+            else:
+                label = ', '.join(f"{pn} : {experiment[pk]}" for pn,pk in zip(param_names,param_keys))
+                
+            plot.add_curve(x, y, label)
         else:
-            label = "Default DQN"
-
-        plot.add_curve(x, y, label)
+            print(f"{name} not in data. Skipping..")
     plot.save(filename)
-
-def plot_action_select(data, names, title, filename):
-    plot = LearningCurvePlot(title)
-    for name in names:
-        experiment = data[name]
-        result = np.array(experiment['results']).T
-        x = result[0]
-        y = result[1]
-        
-        action_selection_kwargs = experiment["action_selection_kwargs"]
-        policy = action_selection_kwargs["policy"]
-        if policy == "egreedy":
-            label = "ε-greedy"
-        elif policy == "ann_egreedy":
-            label = "Annealing ε-greedy"
-        elif policy == "softmax":
-            label = "Softmax"
-        elif policy == "ann_softmax":
-            label = "Annealing softmax" 
-        else:
-            label = ""
-        plot.add_curve(x, y, label)
-    plot.save(filename)
-
 
 # code to plot experiments
-def plot_experiments():
+def plot_experiments(smoothing_window=None):
     data = load_data("data.json")
-    experiments = extract(data)
+
+    for value in data.values():
+        if 'results' in value:
+            value['results'] = np.array(value['results'])
+            if smoothing_window is not None:
+                # additional smoothing
+                value['results'][:,1] = smooth(value['results'][:,1], smoothing_window)
+
+    configs = {"DQN Learning rate" : ["DQN_rb_tn", 'DQN_lr_0.005', 'DQN_lr_0.01'],
+               "DQN exploration" : ['DQN_rb_tn', 'DQN_as_softmax', 'DQN_as_egreedy', 'DQN_as_ann_softmax'],
+               "DQN Configuration": ['DQN', 'DQN_rb', 'DQN_tn', 'DQN_rb_tn']}
     
-    # plot 1 Learning rate
-    names = ['DQN', 'DQN_lr_0.005', 'DQN_lr_0.01']
-    title = "Learning rate compared of DQN agents"
-    param_key = "learning_rate"
-    param_name_show = "Learning rate"
-    plot_hyperparameter(data, names, title, "lr.png", param_name_show, param_key)
+    param_names_dict = [{"learning_rate": "learning rate"},
+                        {"action_selection_kwargs": "policy"}, 
+                        {"target_net_delay": "target net","replay_buffer_size": "replay buffer"}]
+    
+    for index, (title, names) in enumerate(configs.items()):
+        param_keys = list(param_names_dict[index].keys())
+        param_names = list(param_names_dict[index].values())
 
-    # plot 2
-    names = ['DQN', 'DQN_rb', 'DQN_tn', 'DQN_rb_tn']
-    title = "Target Network and Replay Buffer compared"
-    plot_compare_tn_rb(data, names, title, "tn_rb_compared.png")
-
-    #plot 3 
-    names = ['DQN', 'DQN_as_softmax', 'DQN_as_egreedy', 'DQN_as_annsoftmax']
-    title = "Different action selection methods compared"
-    plot_action_select(data, names, title, "Action_select_compared")
-
-
-
-    print()
-
-def extract(data):
-    experiments = []
-    for key in data.keys():
-        experiment = data[key]
-        experiments.append(experiment)
-    return experiments
+        plot_hyperparameter(data, names, title, f"{title}.pdf", param_names, param_keys)
 
 def load_data(data_path):
     if os.path.exists(data_path):
@@ -106,9 +63,8 @@ def load_data(data_path):
     else:
         data = {}
         print("JSON file does not exist.")
-    k = data.keys()
-    print(k)
+    print(data.keys())
     return data
 
 if __name__ == '__main__':
-    plot_experiments()
+    plot_experiments(smoothing_window=9)

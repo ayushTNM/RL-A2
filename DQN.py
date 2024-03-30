@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.optim as optim
 import gymnasium as gym
 import copy
-# import matplotlib.pyplot as plt
 from tqdm import tqdm
 import random as rn
 
@@ -16,9 +15,9 @@ print(dev)
 class QNetwork(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
-        self.linear1 = nn.Linear(input_dim, 128)
-        self.linear2 = nn.Linear(128, 128)
-        self.output_layer = nn.Linear(128, output_dim)
+        self.linear1 = nn.Linear(input_dim, 32)
+        self.linear2 = nn.Linear(32, 32)
+        self.output_layer = nn.Linear(32, output_dim)
 
         # Initialization using Xavier
         nn.init.xavier_uniform_(self.linear1.weight)
@@ -31,6 +30,7 @@ class QNetwork(nn.Module):
         x = torch.relu(self.linear2(x))
         x = self.output_layer(x)
         return x
+    
 
 # Define the DQN agent
 class DQNAgent(BaseNNAgent):
@@ -107,11 +107,7 @@ def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, replay_buffe
             eval_returns.append(agent.evaluate(eval_env,dev))
             eval_timesteps.append(ts)
         
-        # If needed for annealing
-        if action_selection_kwargs['policy'].startswith('ann'):
-            action_selection_kwargs.update(dict(episode=episode))
-        
-        action = agent.select_action(state, **action_selection_kwargs)
+        action = agent.select_action(state, episode = episode,**action_selection_kwargs)
         next_state, reward, term, trunc, _ = env.step(action)
 
         next_state = torch.tensor(next_state, dtype=torch.float32, device=dev)
@@ -123,7 +119,7 @@ def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, replay_buffe
         total_episode_loss += loss
         state = next_state
         total_episode_reward += reward.item()
-
+        
         if term or trunc:
             avg_loss = total_episode_loss / (ts - episode_start_step + 1)
             if total_episode_reward > best_total_reward: best_total_reward = total_episode_reward
