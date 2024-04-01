@@ -36,7 +36,7 @@ def average_over_repetitions(n_repetitions, n_timesteps, learning_rate, gamma, a
 def experiment(experiment_comment=None, overwrite=False):
     # Settings
     # Experiment
-    n_repetitions = 1
+    n_repetitions = 5
     # smoothing_window = 9  # Must be an odd number. Use 'None' to switch smoothing off!
     
     # Exploration, standard action selection kwargs

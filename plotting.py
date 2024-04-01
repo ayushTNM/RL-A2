@@ -38,7 +38,7 @@ def plot_experiments(smoothing_window=None):
             value['results'] = np.array(value['results'])
             if smoothing_window is not None:
                 # additional smoothing
-                value['results'][:,1] = smooth(value['results'][:,1], smoothing_window)
+                value['results'][:,1] = smooth(value['results'][:,1], smoothing_window, poly=1)
 
     configs = {"DQN Learning rate" : ["DQN_rb_tn", 'DQN_lr_0.005', 'DQN_lr_0.01'],
                "DQN exploration" : ['DQN_rb_tn', 'DQN_as_softmax', 'DQN_as_egreedy', 'DQN_as_ann_softmax'],
