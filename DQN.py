@@ -5,6 +5,7 @@ import gymnasium as gym
 import copy
 from tqdm import tqdm
 import random as rn
+import argparse
 
 from Agent import BaseNNAgent
 
@@ -82,13 +83,17 @@ class ReplayBuffer(list):
     def sample(self):
         return rn.choice(self)
 
-def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, replay_buffer_size=None, target_net_delay=None, eval_interval=2500):
+def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, replay_buffer_size=None, target_net_delay=None, eval_interval=2500, play_best_net=False, verbose=False):
     
     env = gym.make("CartPole-v1")
     eval_env = gym.make("CartPole-v1")
     agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, learning_rate, gamma, \
         replay_buffer_size=replay_buffer_size, \
         target_net_delay=target_net_delay)
+    
+    if play_best_net:
+        best_net = None
+        best_net_res = 0
     
     state = torch.tensor(env.reset()[0], dtype=torch.float32, device=dev)
     term, trunc = False, False
@@ -106,6 +111,10 @@ def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, replay_buffe
         if ts % eval_interval == 0:
             eval_returns.append(agent.evaluate(eval_env,dev))
             eval_timesteps.append(ts)
+            
+            if play_best_net and eval_returns[-1] > best_net_res:
+                best_net = copy.deepcopy(agent.Qnet)
+                best_net_res = eval_returns[-1]
         
         action = agent.select_action(state, episode = episode,**action_selection_kwargs)
         next_state, reward, term, trunc, _ = env.step(action)
@@ -124,30 +133,58 @@ def DQN(n_timesteps, learning_rate, gamma, action_selection_kwargs, replay_buffe
             avg_loss = total_episode_loss / (ts - episode_start_step + 1)
             if total_episode_reward > best_total_reward: best_total_reward = total_episode_reward
             progress_bar.desc =  f"Ep: {episode + 1}, Avg. Loss: {avg_loss:3f}, Tot. Rew.: {total_episode_reward}, Best Tot. Rew.: {best_total_reward}"
-            # progress_bar.bar_format='{l_bar}{bar}| ep: '+str(episode)+', ts: {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
-            # if not best_net or avg_loss < min(losses) or total_episode_reward > list(best_net.keys())[0]:
-            #     if not best_net or total_episode_reward >= list(best_net.keys())[0]: # In case avg_loss < min(lossses)
-            #         best_net = {total_episode_reward:copy.deepcopy(agent.Qnet)}
-            # losses.append(avg_loss)
             
             state = torch.tensor(env.reset()[0], dtype=torch.float32, device=dev)
             total_episode_loss = 0
             total_episode_reward = 0
             episode_start_step = ts
             episode += 1
-            
+    
+    if play_best_net:
+        play(agent, best_net)
+    
+    if verbose:
+        print('Final evaluation result:', eval_returns[-1])
+    
     return eval_returns, eval_timesteps
 
-def test():
-    n_timesteps = 25000
-    gamma =0.99
-    lr = 0.001
-    replay_buffer_size = 1000
-    target_net_delay = 100
-    action_selection_kwargs = dict(policy='ann_egreedy', epsilon_start=0.1, epsilon_decay=0.995, epsilon_min=0.01)
-    eval_interval = 2500
+def play(agent, net):
+    env = gym.make("CartPole-v1", render_mode="human")
+    agent.Qnet = net
+    state = torch.tensor(env.reset()[0], dtype=torch.float32, device=dev)
+    term, trunc = False, False
+    total_reward = 0
+
+    while not term and not trunc:
+        action = agent.select_action(state.unsqueeze(0), policy='greedy')
+        next_state, reward, term, trunc, _ = env.step(action)
+        next_state = torch.tensor(next_state, dtype=torch.float32, device=dev)
+        total_reward += reward
+        state = next_state
+    print("Total reward of live episode:", total_reward)
+    env.close()
+
+def test(args):
+    # Exploration, standard action selection kwargs
+    action_selection_kwargs = {
+        'ann_egreedy': dict(policy='ann_egreedy', epsilon_start=0.1, epsilon_decay=0.995, epsilon_min=0.01),
+        'egreedy': dict(policy='egreedy', epsilon=0.1),
+        'softmax': dict(policy='softmax', temp=1),
+        'ann_softmax': dict(policy='ann_softmax', temp_start=1, temp_decay=0.998, temp_min=0.1)
+        }
+
+    # standard hyperparameters
+    hp = dict(n_timesteps = args.n, eval_interval = 500, learning_rate = 0.001, gamma = 1.0, action_selection_kwargs=action_selection_kwargs[args.as_policy], replay_buffer_size=(1000 if args.replay_buffer else None), target_net_delay=(100 if args.target_net else None))
     
-    DQN(n_timesteps, lr, gamma, action_selection_kwargs, replay_buffer_size, target_net_delay, eval_interval)
+    DQN(**hp, play_best_net=True, verbose=True)
+
 
 if __name__ == '__main__':
-    test()
+    parser = argparse.ArgumentParser()
+    to_bool = lambda s: s == 'True'
+    parser.add_argument('--replay_buffer', type=to_bool, default=True, help='whether to use a replay buffer')
+    parser.add_argument('--target_net', type=to_bool, default=True, help='whether to use a target network')
+    parser.add_argument('--as_policy', default='ann_egreedy', choices=['ann_egreedy', 'egreedy', 'softmax', 'ann_softmax'], help='type of action selection (exploration) policy')
+    parser.add_argument('--n', type=int, default=25001, help='number of train steps')
+    args = parser.parse_args()
+    test(args)
